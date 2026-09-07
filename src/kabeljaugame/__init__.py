@@ -90,7 +90,8 @@ def fish_to_new_pool(fish: list[Fish]):
         gene_c_items.count(0) * 2,
     )
 
-    print("new values: {0}, {1}, {2}, {3}, {4}, {5}".format(gene_a_items.count(1) * 2,
+    print("new values: {0}, {1}, {2}, {3}, {4}, {5}".format(
+                    gene_a_items.count(1) * 2,
                     gene_a_items.count(0) * 2,
                     gene_b_items.count(1) * 2,
                     gene_b_items.count(0) * 2,
@@ -103,7 +104,7 @@ def fish_to_new_pool(fish: list[Fish]):
 def main() -> None:
     pool = TripleGenePool(12, 12, 12, 12, 12, 12)
 
-    for i in range(4):
+    for i in range(5):
         print(f"generation {i}")
         fish = pool.generate_all_fish()
 
@@ -114,7 +115,7 @@ def main() -> None:
         
         print("avg length:", sum(map(Fish.get_length, fish)) / len(fish))
         
-        if i == 3:
+        if i == 4:
             break
 
         fish = fish[:6]
