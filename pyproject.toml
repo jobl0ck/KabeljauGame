@@ -7,7 +7,9 @@ authors = [
     { name = "jobl0ck", email = "jonas@dieselkraft.net" }
 ]
 requires-python = ">=3.14"
-dependencies = []
+dependencies = [
+    "fpdf2>=2.8.8",
+]
 
 [project.scripts]
 kabeljaugame = "kabeljaugame:main"
