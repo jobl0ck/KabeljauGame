@@ -24,7 +24,7 @@ def make_many_fische(fische):
         make_fisch(fisch) for fisch in fische
     ]
 
-def make_fisch(fisch, out_name="out.svg"):
+def make_fisch(fisch):
     gene = flatten(fisch.gene)
 
     with open("kabeljau.svg") as f:
