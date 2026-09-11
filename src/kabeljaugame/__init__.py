@@ -1,123 +1,239 @@
 import random
 
-class GenePool:
-    __pool: list[int]
+from dataclasses import dataclass
 
-    def __init__(self, gene_a_count: int, gene_b_count: int):
-        """
-        Note:   gene_a is the one without prime and gene b is with prime
-                gene_a is treated as 1 and gene b as zero
-        """
+from fpdf import FPDF, Align
+from fpdf.svg import SVGObject
+from fpdf.drawing import Transform
 
-        self.__pool = [1] * gene_a_count + [0] * gene_b_count
+from kabeljaugame import fisch_graphics
+
+
+@dataclass
+class Allelen:
+    a: int
+    ap: int
+    b: int
+    bp: int
+    c: int
+    cp: int
+
+    def get_pools(self):
+        return [
+            [True] * x + [False] * xp for x, xp in [(self.a, self.ap), (self.b, self.bp), (self.c, self.cp)]
+        ]
     
-    def __pull_item(self):
-        chosen = random.choice(self.__pool)
-        self.__pool.remove(chosen)
-        return chosen
+    def as_array(self):
+        return [self.a, self.ap, self.b, self.bp, self.c, self.cp]
 
-    def pull_gene(self):
-        if len(self.__pool) == 0:
-            raise ValueError("Pool is empty")
-        return (self.__pull_item(), self.__pull_item())
+@dataclass
+class Fisch:
+    gene: list[int]
 
-class TripleGenePool:
-    pool_a: GenePool
-    pool_b: GenePool
-    pool_c: GenePool
-
-    generateable_amount: int
-
-    def __init__(self, cnt_a, cnt_ap, cnt_b, cnt_bp, cnt_c, cnt_cp):
-        assert cnt_a + cnt_ap == cnt_b + cnt_bp and cnt_a + cnt_ap == cnt_c + cnt_cp, "pools have to be of the same size"
-        assert (cnt_a + cnt_ap) % 2 == 0, "sum of n and np has to be even"
-        
-        self.pool_a = GenePool(cnt_a, cnt_ap)
-        self.pool_b = GenePool(cnt_b, cnt_bp)
-        self.pool_c = GenePool(cnt_c, cnt_cp)
-
-        self.generateable_amount = (cnt_a + cnt_ap) // 2
-    
-    def generate_fish(self):
-        return Fish(
-            self.pool_a.pull_gene(),
-            self.pool_b.pull_gene(),
-            self.pool_c.pull_gene()
-        )
-    
-    def generate_all_fish(self):
-        return list(self.generate_fish() for _ in range(self.generateable_amount))
-
-class Fish:
-    gene_a: tuple[int, int]
-    gene_b: tuple[int, int]
-    gene_c: tuple[int, int]
-
-    const_a: int = 10
-    const_b: int = 6
-    const_c: int = 2
-
-    def __init__(self, a, b, c):
-        self.gene_a = a
-        self.gene_b = b
-        self.gene_c = c
-    
     def get_length(self):
-        return sum(sum(a) + b for a, b in zip(
-            [self.gene_a, self.gene_b, self.gene_c],
-            [self.const_a, self.const_b, self.const_c]))
+        return sum([
+            sum(self.gene[0]) + 10,
+            sum(self.gene[1]) + 6,
+            sum(self.gene[2]) + 2
+        ])
+
+class FischPool:
+    def __init__(self, kill_slice=slice(0, 6), allelen=Allelen(12, 12, 12, 12, 12, 12)):
+        self.allelen = allelen
+        self.kill_slice = kill_slice
     
-    def __str__(self):
-        return f"Fish with length {self.get_length()} {self.gene_a} {self.gene_b} {self.gene_c}"
+    def make_fisch_and_evolve(self):
+        fische = []
+
+        pools = self.allelen.get_pools()
+
+        def pull_pool(pool):
+            e = random.choice(pool)
+            pool.remove(e)
+            return int(e)
+
+        for i in range(12):
+            gene = tuple((pull_pool(p), pull_pool(p)) for p in pools)
+            fische.append(Fisch(gene))
+        
+        fische = sorted(fische, key=lambda x: x.get_length())
+
+        print("GENE")
+
+        for f in fische:
+            print(f.get_length(), f.gene)
+        
+        avg = sum(map(Fisch.get_length, fische)) / len(fische)
+
+        print("avg length:", avg)
+        print("percent:", avg/21*100)
+
+        #print(self.allelen)
+        
+        survivors = fische[self.kill_slice]
+
+        assert len(survivors) == 6, "slice didnt result in 6 remaining fisch"
+
+        gene_items = [[] for _ in range(3)]
+
+        for s in survivors:
+            for i in range(3):
+                gene_items[i] += s.gene[i]
+
+        self.allelen = Allelen(
+            gene_items[0].count(1) * 2,
+            gene_items[0].count(0) * 2,
+            gene_items[1].count(1) * 2,
+            gene_items[1].count(0) * 2,
+            gene_items[2].count(1) * 2,
+            gene_items[2].count(0) * 2,
+        )
+
+        new_allelen = Allelen(
+            gene_items[0].count(1),
+            gene_items[0].count(0),
+            gene_items[1].count(1),
+            gene_items[1].count(0),
+            gene_items[2].count(1),
+            gene_items[2].count(0),
+        )
+
+        print(new_allelen)
+
+        return fische, new_allelen, survivors
     
+def main():
+    # pdf needs page with tables 1a, 1b, 2a, 2b and fische from both runs
+    pdf = FPDF()
 
-def fish_to_new_pool(fish: list[Fish]):
-    gene_a_items = []
-    gene_b_items = []
-    gene_c_items = []
+    for kill_slice, text, table_letter in [
+            (slice(0, 6), "großer Individuen", "a"),
+            (slice(3, 9), "mittelgroßer Individuen", "b")
+        ]:
 
-    for f in fish:
-        gene_a_items += f.gene_a
-        gene_b_items += f.gene_b
-        gene_c_items += f.gene_c
-    
-    pool = TripleGenePool(
-        gene_a_items.count(1) * 2,
-        gene_a_items.count(0) * 2,
-        gene_b_items.count(1) * 2,
-        gene_b_items.count(0) * 2,
-        gene_c_items.count(1) * 2,
-        gene_c_items.count(0) * 2,
-    )
+        p = FischPool(kill_slice)
 
-    print("new values: {0}, {1}, {2}, {3}, {4}, {5}".format(
-                    gene_a_items.count(1) * 2,
-                    gene_a_items.count(0) * 2,
-                    gene_b_items.count(1) * 2,
-                    gene_b_items.count(0) * 2,
-                    gene_c_items.count(1) * 2,
-                    gene_c_items.count(0) * 2,)
-                )
+        all_fische = []
+        all_allelen = []
 
-    return pool
+        fische, allele, _ = p.make_fisch_and_evolve()
+        all_fische.append(fische)
+        all_allelen.append(allele)
+        pre_1_raw_svgs = fisch_graphics.make_many_fische(fische)
+        fische, allele, _ = p.make_fisch_and_evolve()
+        all_fische.append(fische)
+        all_allelen.append(allele)
+        fische, allele, _ = p.make_fisch_and_evolve()
+        all_fische.append(fische)
+        all_allelen.append(allele)
+        fische, allele, survivors = p.make_fisch_and_evolve()
+        all_fische.append(fische)
+        all_allelen.append(allele)
+        post_4_raw_svgs = fisch_graphics.make_many_fische(survivors)
 
-def main() -> None:
-    pool = TripleGenePool(12, 12, 12, 12, 12, 12)
+        # try generating some fische
 
-    for i in range(5):
-        print(f"generation {i}")
-        fish = pool.generate_all_fish()
+        pdf.add_page()
 
-        fish = sorted(fish, key=lambda x: x.get_length())
+        pdf.set_font("Times", size=12)
 
-        for f in fish:
-            print(f)
+        pdf.cell(pdf.w, 10, f"Fische vor Fang 1 {text}", align=Align.C, center=True)
+
+        for i, s in enumerate(pre_1_raw_svgs):
+            svg = SVGObject(s)
+
+            width, height, paths = svg.transform_to_page_viewport(pdf, align_viewbox=False)
+
+            paths.transform = paths.transform @ Transform.translation(
+                -width / 2, -height / 2
+            ).scale(0.5, 0.5).translate(pdf.w / 2 - (width * 0.6) + (width * 0.6) * (i % 3), 20 + (height * 0.6 * ((i // 3) + 0.5)))
+
+            pdf.draw_path(paths)
         
-        print("avg length:", sum(map(Fish.get_length, fish)) / len(fish))
-        
-        if i == 4:
-            break
+        offset = height*0.6*4+20
 
-        fish = fish[:6]
+        pdf.ln(offset)
+
+        pdf.cell(pdf.w, 10, f"Fische nach Fang 4 {text}", align=Align.C, center=True)
+
+        for i, s in enumerate(post_4_raw_svgs):
+            svg = SVGObject(s)
+
+            width, height, paths = svg.transform_to_page_viewport(pdf, align_viewbox=False)
+
+            paths.transform = paths.transform @ Transform.translation(
+                -width / 2, -height / 2
+            ).scale(0.5, 0.5).translate(pdf.w / 2 - (width * 0.6) + (width * 0.6) * (i % 3), offset + 20 + (height * 0.6 * ((i // 3) + 0.5)))
+
+            pdf.draw_path(paths)
         
-        pool = fish_to_new_pool(fish)
+        # now the tables ..
+
+        pdf.add_page()
+
+        pdf.cell(text=f"Tab. 1{table_letter}")
+
+        pdf.ln()
+
+        with pdf.table() as table:
+
+            # header
+            row = table.row()
+            row.cell()
+            for i in range(4):
+                row.cell(f"{i+1}. Fang")
+
+            # the fische
+            for ri in range(12):
+                row = table.row()
+                row.cell(f"Fisch {ri+1}")
+                for gen in all_fische:
+                    row.cell(f"{gen[ri].get_length()}")
+            
+            # averages
+            row = table.row()
+            row.cell("Mittelwert der LE")
+            for gen in all_fische:
+                avg = sum(map(Fisch.get_length, gen)) / len(gen)
+                row.cell(f"{avg:.2f}")
+            
+            # percentages
+
+            first_gen_avg = sum(map(Fisch.get_length, all_fische[0])) / len(all_fische[0])
+
+            row = table.row()
+            row.cell("Prozent LE der Ausgangspopulation", align=Align.L)
+            for gen in all_fische:
+                avg = sum(map(Fisch.get_length, gen)) / len(gen)
+                row.cell(f"{avg/first_gen_avg*100:.2f}%")
+
+        pdf.ln()
+
+        pdf.cell(text=f"Tab. 2{table_letter}")
+
+        pdf.ln()
+
+        with pdf.table() as table:
+            row = table.row()
+            row.cell()
+            row.cell("LE")
+            for i in range(4):
+                row.cell(f"{i+1}. Fang")
+            
+            for ri in range(6):
+                row = table.row()
+                
+                if ri % 2 == 0:
+                    row.cell(f"Gen {["A", "B", "C"][ri//2]}", rowspan=2)
+                
+                row.cell(f"{["Blau", "Schwarz", "Rot", "Gelb", "Lila", "Orange"][ri]} = {6-ri}", align=Align.R)
+
+                for gen in all_allelen:
+                    row.cell(f"{gen.as_array()[ri]}")
+
+        # now generate graphs
+        # for fisch le use min max avg
+        # for allelen just raw values plotted or smth.
+        #   use split colored graph for each gene maybe
+
+    pdf.output("out.pdf")
